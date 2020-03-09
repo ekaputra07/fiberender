@@ -162,6 +162,15 @@ func shouldShowPrerenderedPage(c *fiber.Ctx, cfg PrerenderConfig) bool {
 	if c.Get("x-prerender") != "" {
 		return false
 	}
+	//if it is requesting a resource...dont prerender
+	for _, ext := range cfg.ExtensionsToIgnore {
+		if strings.HasSuffix(baseURL, ext) {
+			return false
+		}
+	}
+	// TODO: check for whitelisted URL
+	// TODO: check for blacklisted URL
+
 	//if it contains _escaped_fragment_, show prerendered page
 	if strings.Contains(c.OriginalURL(), "_escaped_fragment_") {
 		return true
@@ -176,15 +185,7 @@ func shouldShowPrerenderedPage(c *fiber.Ctx, cfg PrerenderConfig) bool {
 	if c.Get("x-bufferbot") != "" {
 		return true
 	}
-	//if it is a bot and is requesting a resource...dont prerender
-	for _, ext := range cfg.ExtensionsToIgnore {
-		if strings.HasSuffix(baseURL, ext) {
-			return false
-		}
-	}
-	// TODO: check for whitelisted URL
-	// TODO: check for blacklisted URL
-	return true
+	return false
 }
 
 func getPrerenderResponse(c *fiber.Ctx) error {
