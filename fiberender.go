@@ -2,6 +2,7 @@ package fiberender
 
 import (
 	"net/http"
+	"regexp"
 	"strings"
 
 	"github.com/gofiber/fiber"
@@ -162,30 +163,50 @@ func shouldShowPrerenderedPage(c *fiber.Ctx, cfg PrerenderConfig) bool {
 	if c.Get("x-prerender") != "" {
 		return false
 	}
-	//if it is requesting a resource...dont prerender
+	shouldPrerender := false
+	// if it contains _escaped_fragment_, show prerendered page
+	if strings.Contains(c.OriginalURL(), "_escaped_fragment_") {
+		shouldPrerender = true
+	}
+	// if it is a bot...show prerendered page
+	for _, bot := range cfg.CrawlerUserAgents {
+		if strings.Contains(userAgent, bot) {
+			shouldPrerender = true
+			break
+		}
+	}
+	// if it is BufferBot...show prerendered page
+	if c.Get("x-bufferbot") != "" {
+		shouldPrerender = true
+	}
+	// if it is a bot and is requesting a resource...dont prerender
 	for _, ext := range cfg.ExtensionsToIgnore {
 		if strings.HasSuffix(baseURL, ext) {
 			return false
 		}
 	}
-	// TODO: check for whitelisted URL
-	// TODO: check for blacklisted URL
-
-	//if it contains _escaped_fragment_, show prerendered page
-	if strings.Contains(c.OriginalURL(), "_escaped_fragment_") {
-		return true
-	}
-	//if it is a bot...show prerendered page
-	for _, bot := range cfg.CrawlerUserAgents {
-		if strings.Contains(userAgent, bot) {
-			return true
+	// if it is a bot and not requesting a resource and is not whitelisted...dont prerender
+	if len(cfg.Whitelist) > 0 {
+		inWhitelist := false
+		for _, w := range cfg.Whitelist {
+			r, err := regexp.Compile(w)
+			if err != nil {
+				continue
+			}
+			if r.MatchString(baseURL) {
+				inWhitelist = true
+				break
+			}
+		}
+		if !inWhitelist {
+			return false
 		}
 	}
-	//if it is BufferBot...show prerendered page
-	if c.Get("x-bufferbot") != "" {
-		return true
+	if len(cfg.Blacklist) > 0 {
+
 	}
-	return false
+
+	return shouldPrerender
 }
 
 func getPrerenderResponse(c *fiber.Ctx) error {
