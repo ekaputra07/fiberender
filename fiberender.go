@@ -1,4 +1,4 @@
-package fiberender
+package prerender
 
 import (
 	"net/http"
@@ -8,8 +8,8 @@ import (
 	"github.com/gofiber/fiber"
 )
 
-// PrerenderConfig can be used to customize Prerender
-type PrerenderConfig struct {
+// Config can be used to customize Prerender
+type Config struct {
 	Skip               func(*fiber.Ctx) bool
 	Token              string
 	ServiceURL         string
@@ -27,15 +27,15 @@ type PrerenderConfig struct {
 }
 
 // defaultConfig is the default configuration if user not specify their own config
-var defaultConfig = PrerenderConfig{
+var defaultConfig = Config{
 	ServiceURL:         serviceURL,
 	CrawlerUserAgents:  CrawlerUserAgents,
 	ExtensionsToIgnore: ExtensionsToIgnore,
 }
 
 // New returns the middleware
-func New(config ...PrerenderConfig) func(*fiber.Ctx) {
-	var cfg PrerenderConfig
+func New(config ...Config) func(*fiber.Ctx) {
+	var cfg Config
 
 	if len(config) == 0 {
 		cfg = defaultConfig
@@ -63,7 +63,7 @@ func New(config ...PrerenderConfig) func(*fiber.Ctx) {
 	}
 }
 
-func shouldShowPrerenderedPage(c *fiber.Ctx, cfg PrerenderConfig) bool {
+func shouldShowPrerenderedPage(c *fiber.Ctx, cfg Config) bool {
 	baseURL := strings.ToLower(c.BaseURL())
 	userAgent := c.Get("user-agent")
 	referer := c.Get("referer")

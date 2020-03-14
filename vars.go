@@ -1,4 +1,4 @@
-package fiberender
+package prerender
 
 var (
 	// serviceURL is the default URL of Prerender service
