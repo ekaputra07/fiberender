@@ -8,96 +8,9 @@ import (
 	"github.com/gofiber/fiber"
 )
 
-var (
-	// serviceURL is the default URL of Prerender service
-	serviceURL = "https://service.prerender.io/"
-
-	// CrawlerUserAgents are list of bot UAs
-	CrawlerUserAgents = []string{
-		"googlebot",
-		"Yahoo! Slurp",
-		"bingbot",
-		"yandex",
-		"baiduspider",
-		"facebookexternalhit",
-		"twitterbot",
-		"rogerbot",
-		"linkedinbot",
-		"embedly",
-		"quora link preview",
-		"showyoubot",
-		"outbrain",
-		"pinterest/0.",
-		"developers.google.com/+/web/snippet",
-		"slackbot",
-		"vkShare",
-		"W3C_Validator",
-		"redditbot",
-		"Applebot",
-		"WhatsApp",
-		"flipboard",
-		"tumblr",
-		"bitlybot",
-		"SkypeUriPreview",
-		"nuzzel",
-		"Discordbot",
-		"Google Page Speed",
-		"Qwantify",
-		"pinterestbot",
-		"Bitrix link preview",
-		"XING-contenttabreceiver",
-		"Chrome-Lighthouse",
-	}
-
-	// ExtensionsToIgnore are file extensions that we won't send to Prerender
-	ExtensionsToIgnore = []string{
-		".js",
-		".css",
-		".xml",
-		".less",
-		".png",
-		".jpg",
-		".jpeg",
-		".gif",
-		".pdf",
-		".doc",
-		".txt",
-		".ico",
-		".rss",
-		".zip",
-		".mp3",
-		".rar",
-		".exe",
-		".wmv",
-		".doc",
-		".avi",
-		".ppt",
-		".mpg",
-		".mpeg",
-		".tif",
-		".wav",
-		".mov",
-		".psd",
-		".ai",
-		".xls",
-		".mp4",
-		".m4a",
-		".swf",
-		".dat",
-		".dmg",
-		".iso",
-		".flv",
-		".m4v",
-		".torrent",
-		".woff",
-		".ttf",
-		".svg",
-		".webmanifest",
-	}
-)
-
 // PrerenderConfig can be used to customize Prerender
 type PrerenderConfig struct {
+	Skip               func(*fiber.Ctx) bool
 	Token              string
 	ServiceURL         string
 	Host               string
@@ -105,8 +18,8 @@ type PrerenderConfig struct {
 	Protocol           string
 	CrawlerUserAgents  []string
 	ExtensionsToIgnore []string
-	Whitelist          []string
-	Blacklist          []string
+	Whitelist          []regexp.Regexp
+	Blacklist          []regexp.Regexp
 
 	// TODO:
 	// BeforeRender() https://github.com/prerender/prerender-node#beforerender
@@ -141,7 +54,7 @@ func New(config ...PrerenderConfig) func(*fiber.Ctx) {
 	}
 
 	return func(c *fiber.Ctx) {
-		if !shouldShowPrerenderedPage(c, cfg) {
+		if (cfg.Skip != nil && cfg.Skip(c)) || !shouldShowPrerenderedPage(c, cfg) {
 			c.Next()
 			return
 		}
@@ -153,6 +66,7 @@ func New(config ...PrerenderConfig) func(*fiber.Ctx) {
 func shouldShowPrerenderedPage(c *fiber.Ctx, cfg PrerenderConfig) bool {
 	baseURL := strings.ToLower(c.BaseURL())
 	userAgent := c.Get("user-agent")
+	referer := c.Get("referer")
 
 	if userAgent == "" {
 		return false
@@ -163,6 +77,7 @@ func shouldShowPrerenderedPage(c *fiber.Ctx, cfg PrerenderConfig) bool {
 	if c.Get("x-prerender") != "" {
 		return false
 	}
+
 	shouldPrerender := false
 	// if it contains _escaped_fragment_, show prerendered page
 	if strings.Contains(c.OriginalURL(), "_escaped_fragment_") {
@@ -189,11 +104,7 @@ func shouldShowPrerenderedPage(c *fiber.Ctx, cfg PrerenderConfig) bool {
 	if len(cfg.Whitelist) > 0 {
 		inWhitelist := false
 		for _, w := range cfg.Whitelist {
-			r, err := regexp.Compile(w)
-			if err != nil {
-				continue
-			}
-			if r.MatchString(baseURL) {
+			if w.MatchString(baseURL) {
 				inWhitelist = true
 				break
 			}
@@ -202,8 +113,20 @@ func shouldShowPrerenderedPage(c *fiber.Ctx, cfg PrerenderConfig) bool {
 			return false
 		}
 	}
+	// if it is a bot and not requesting a resource and is not blacklisted(url or referer)...dont prerender
 	if len(cfg.Blacklist) > 0 {
-
+		inBlacklist := false
+		for _, w := range cfg.Blacklist {
+			blacklistedURL := w.MatchString(baseURL)
+			blacklistedReferer := w.MatchString(referer)
+			if blacklistedURL || blacklistedReferer {
+				inBlacklist = true
+				break
+			}
+		}
+		if inBlacklist {
+			return false
+		}
 	}
 
 	return shouldPrerender
